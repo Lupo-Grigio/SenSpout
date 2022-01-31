@@ -9,6 +9,3 @@
 // Firebase Authentication
 #define USER_EMAIL "your.email@place.thing"
 #define USER_PASSWORD "your_password"
-
-// Firebase Node
-#define READOUTS_NODE "/readouts/FB1"
