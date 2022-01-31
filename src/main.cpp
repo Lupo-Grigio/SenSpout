@@ -13,8 +13,6 @@
 
 // #define SEALEVELPRESSURE_HPA (1013.25)
 
-#define FIREBASE_NODE "/readouts/" + FURBALL_ID
-
 // Define Firebase Data object
 FirebaseData fbdo;
 
@@ -29,7 +27,7 @@ unsigned long count = 0;
 // TODO: Should probably be in its own file similar to Furball
 Adafruit_BME680 bme;
 
-
+String uniqueId;
 
 void setup() {
 
@@ -104,14 +102,17 @@ void setup() {
   bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
   bme.setGasHeater(320, 150); // 320*C for 150 ms
 
-
+  // generate unique ID
+  byte mac[6];
+  WiFi.macAddress(mac);
+  uniqueId = String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
 }
 
 // the loop function runs over and over again forever
 void loop(){
 
   //Firebase.ready works for authentication management and should be called repeatedly in the loop.
-
+  // 300000ms is 5 minutes
   if (Firebase.ready() && (millis() - sendDataPrevMillis > 300000 || sendDataPrevMillis == 0))
   {
     sendDataPrevMillis = millis();
@@ -179,7 +180,7 @@ void loop(){
     readings.set("bme/gas", gas / 1000.0);
     readings.set("timestamp/.sv", "timestamp");
 
-    Serial.printf("Push data with timestamp... %s\n", Firebase.RTDB.pushJSON(&fbdo, READOUTS_NODE, &readings) ? "ok" : fbdo.errorReason().c_str());
+    Serial.printf("Push data with timestamp... %s\n", Firebase.RTDB.pushJSON(&fbdo, String("/readoutsByModuleId/") + uniqueId, &readings) ? "ok" : fbdo.errorReason().c_str());
 
 
     count++;
