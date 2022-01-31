@@ -11,6 +11,8 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 
+// #define SEALEVELPRESSURE_HPA (1013.25)
+
 #define FIREBASE_NODE "/readouts/" + FURBALL_ID
 
 // Define Firebase Data object
@@ -97,6 +99,10 @@ void setup() {
   }
 
   bme.setTemperatureOversampling(BME680_OS_8X);
+  bme.setHumidityOversampling(BME680_OS_2X);
+  bme.setPressureOversampling(BME680_OS_4X);
+  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+  bme.setGasHeater(320, 150); // 320*C for 150 ms
 
 
 }
@@ -106,26 +112,75 @@ void loop(){
 
   //Firebase.ready works for authentication management and should be called repeatedly in the loop.
 
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > 5000 || sendDataPrevMillis == 0))
+  if (Firebase.ready() && (millis() - sendDataPrevMillis > 300000 || sendDataPrevMillis == 0))
   {
     sendDataPrevMillis = millis();
 
-  //! BME stuff should probably go in bme files as handlers like in Furball
-  FirebaseJson bmeReadings;
-  float temp = bme.readTemperature();
+    //! BME stuff should probably go in bme files as handlers like in Furball
+    // Tell BME680 to begin measurement.
+    unsigned long endTime = bme.beginReading();
+    if (endTime == 0) {
+      Serial.println(F("Failed to begin reading :("));
+      return;
+    }
+    Serial.print(F("Reading started at "));
+    Serial.print(millis());
+    Serial.print(F(" and will finish at "));
+    Serial.println(endTime);
+    // You can do other work while BME680 measures
 
-  bmeReadings.set("bme/temperature", temp);
-  bmeReadings.set("timestamp/.sv", "timestamp");
+    // delay(50); // This represents parallel work.
+    // There's no need to delay() until millis() >= endTime: bme.endReading()
+    // takes care of that. It's okay for parallel work to take longer than
+    // BME680's measurement time.
 
-  Serial.printf("Push data with timestamp... %s\n", Firebase.RTDB.pushJSON(&fbdo, READOUTS_NODE, &bmeReadings) ? "ok" : fbdo.errorReason().c_str());
-  // bmeReadings.set("timestamp/.sv", "timestamp");
-  // bmeReadings.add("temperature/" + String(count), temp);
-  // Firebase.RTDB.updateNode(&fbdo, F("/bme"), &bmeReadings);
-  // Serial.print(F("Temperature = "));
-  // Serial.print(temp);
-  // Serial.print(F(" *C and "));
-  // Serial.print(temp * 9/5 + 32);
-  // Serial.println(F(" *F"));
+    // Obtain measurement results from BME680. Note that this operation isn't
+    // instantaneous even if milli() >= endTime due to I2C/SPI latency.
+    if (!bme.endReading()) {
+      Serial.println(F("Failed to complete reading :("));
+      return;
+    }
+
+    Serial.print(F("Reading completed at "));
+    Serial.println(millis());
+
+    // Serial.print(F("Temperature = "));
+    // Serial.print(bme.temperature);
+    // Serial.println(F(" *C"));
+
+    // Serial.print(F("Pressure = "));
+    // Serial.print(bme.pressure / 100.0);
+    // Serial.println(F(" hPa"));
+
+    // Serial.print(F("Humidity = "));
+    // Serial.print(bme.humidity);
+    // Serial.println(F(" %"));
+
+    // Serial.print(F("Gas = "));
+    // Serial.print(bme.gas_resistance / 1000.0);
+    // Serial.println(F(" KOhms"));
+
+    // Serial.print(F("Approx. Altitude = "));
+    // Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+    // Serial.println(F(" m"));
+
+    Serial.println();
+
+    FirebaseJson readings;
+    float temperature = bme.temperature;
+    uint32_t pressure = bme.pressure;
+    float humidity = bme.humidity;
+    uint32_t gas = bme.gas_resistance;
+
+
+    readings.set("bme/temperature", temperature);
+    readings.set("bme/pressure", pressure / 100.0);
+    readings.set("bme/humidity", humidity);
+    readings.set("bme/gas", gas / 1000.0);
+    readings.set("timestamp/.sv", "timestamp");
+
+    Serial.printf("Push data with timestamp... %s\n", Firebase.RTDB.pushJSON(&fbdo, READOUTS_NODE, &readings) ? "ok" : fbdo.errorReason().c_str());
+
 
     count++;
   }
