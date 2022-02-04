@@ -11,6 +11,9 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 
+// OTA stuff
+#include <ArduinoOTA.h>
+
 // #define SEALEVELPRESSURE_HPA (1013.25)
 
 // Define Firebase Data object
@@ -33,17 +36,59 @@ void setup() {
 
 // Set up Firebase, WiFi, etc...
   Serial.begin(115200);
+  Serial.println("Booting");
+  WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
   Serial.print("Connecting to WiFi.");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(300);
-    Serial.println("...");
+  // while (WiFi.status() != WL_CONNECTED) {
+  //   delay(300);
+  //   Serial.println("...");
+  // }
+
+  // Serial.print("Connected to: ");
+  // Serial.println(WiFi.localIP());
+  // Serial.println();
+
+  // From OTA example, maybe above still fine
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
+    delay(5000);
+    ESP.restart();
   }
 
-  Serial.print("Connected to: ");
+  ArduinoOTA
+  .onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH)
+      type = "sketch";
+    else // U_SPIFFS
+      type = "filesystem";
+
+    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+    Serial.println("Start updating " + type);
+  })
+  .onEnd([]() {
+    Serial.println("\nEnd");
+  })
+  .onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  })
+  .onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+
+  ArduinoOTA.begin();
+
+  Serial.println("Ready");
+  Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-  Serial.println();
+
+// END OTA EXAMPLE
 
   Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
 
@@ -89,7 +134,7 @@ void setup() {
   */
 
  // Set up bme680
- //! some boards may use bme280 instead
+ //! some boards may use bme280 instead. Have not confirmed!
  // TODO: put this in its own file, in a void begin()
   if (!bme.begin()) {
     Serial.println("Could not find a valid BME680 sensor, check wiring!");
@@ -106,10 +151,17 @@ void setup() {
   byte mac[6];
   WiFi.macAddress(mac);
   uniqueId = String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
+
+  FirebaseData testdo;
+  FirebaseJson test;
+  test.add("test", "test2");
+  Firebase.RTDB.pushJSON(&testdo, "tests", &test);
 }
 
 // the loop function runs over and over again forever
 void loop(){
+  // OTA stuff
+  ArduinoOTA.handle();
 
   //Firebase.ready works for authentication management and should be called repeatedly in the loop.
   // 300000ms is 5 minutes
@@ -180,7 +232,9 @@ void loop(){
     readings.set("bme/gas", gas / 1000.0);
     readings.set("timestamp/.sv", "timestamp");
 
-    Serial.printf("Push data with timestamp... %s\n", Firebase.RTDB.pushJSON(&fbdo, String("/readoutsByModuleId/") + uniqueId, &readings) ? "ok" : fbdo.errorReason().c_str());
+    Serial.printf(
+      "Push data with timestamp... %s\n",
+      Firebase.RTDB.pushJSON(&fbdo, String("/readoutsByModuleId/") + uniqueId, &readings) ? "ok" : fbdo.errorReason().c_str());
 
 
     count++;
