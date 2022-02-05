@@ -30,7 +30,7 @@ unsigned long count = 0;
 // TODO: Should probably be in its own file similar to Furball
 Adafruit_BME680 bme;
 
-String uniqueId;
+String moduleId;
 
 void setup() {
 
@@ -150,7 +150,7 @@ void setup() {
   // generate unique ID
   byte mac[6];
   WiFi.macAddress(mac);
-  uniqueId = String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
+  moduleId = String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
 
   FirebaseData testdo;
   FirebaseJson test;
@@ -230,11 +230,12 @@ void loop(){
     readings.set("bme/pressure", pressure / 100.0);
     readings.set("bme/humidity", humidity);
     readings.set("bme/gas", gas / 1000.0);
+    readings.set("moduleId/", moduleId);
     readings.set("timestamp/.sv", "timestamp");
 
     Serial.printf(
       "Push data with timestamp... %s\n",
-      Firebase.RTDB.pushJSON(&fbdo, String("/readoutsByModuleId/") + uniqueId, &readings) ? "ok" : fbdo.errorReason().c_str());
+      Firebase.RTDB.pushJSON(&fbdo, "readouts", &readings) ? "ok" : fbdo.errorReason().c_str());
 
 
     count++;
