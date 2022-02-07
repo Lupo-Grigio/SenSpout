@@ -14,6 +14,7 @@
 // OTA stuff
 #include <ArduinoOTA.h>
 
+#define SPOUT_VERSION "0.0.2"
 // #define SEALEVELPRESSURE_HPA (1013.25)
 
 // Define Firebase Data object
@@ -40,16 +41,7 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to WiFi.");
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   delay(300);
-  //   Serial.println("...");
-  // }
-
-  // Serial.print("Connected to: ");
-  // Serial.println(WiFi.localIP());
-  // Serial.println();
-
-  // From OTA example, maybe above still fine
+  
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
     delay(5000);
@@ -152,13 +144,16 @@ void setup() {
   WiFi.macAddress(mac);
   moduleId = String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
 
-  FirebaseData testdo;
-  FirebaseJson test;
-  test.add("test", "test2");
-  Firebase.RTDB.pushJSON(&testdo, "tests", &test);
+  FirebaseData initDo;
+  FirebaseJson initJson;
+  initJson.add("moduleId", moduleId);
+  initJson.add("ip", WiFi.localIP().toString());
+  initJson.set("timestamp/.sv", "timestamp");
+  initJson.set("spoutVersion", SPOUT_VERSION);
+  Firebase.RTDB.pushJSON(&initDo, "initLog", &initJson);
 }
 
-// the loop function runs over and over again forever
+
 void loop(){
   // OTA stuff
   ArduinoOTA.handle();
