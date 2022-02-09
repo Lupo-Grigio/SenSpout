@@ -10,6 +10,10 @@
 // TODO: Should probably be in its own file
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
+// !new based on docs
+#include <Adafruit_PM25AQI.h>
+// #include <SoftwareSerial.h>
+// SoftwareSerial pmSerial(16, 17);
 
 // OTA stuff
 #include <ArduinoOTA.h>
@@ -30,6 +34,8 @@ unsigned long count = 0;
 
 // TODO: Should probably be in its own file similar to Furball
 Adafruit_BME680 bme;
+// !new based on docs
+Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
 
 String moduleId;
 
@@ -139,18 +145,31 @@ void setup() {
   bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
   bme.setGasHeater(320, 150); // 320*C for 150 ms
 
-  // generate unique ID
-  byte mac[6];
-  WiFi.macAddress(mac);
-  moduleId = String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
+  // Set up PM25AQI
+  //! new based on docs
+  Serial1.begin(9600);
+  // pmSerial.begin(9600);
+  if(!aqi.begin_UART(&Serial1)) {
+  // if (!aqi.begin_UART(&pmSerial)) { 
+    Serial.println("Could not find a valid PM25AQI sensor!");
+  }
 
-  FirebaseData initDo;
-  FirebaseJson initJson;
-  initJson.add("moduleId", moduleId);
-  initJson.add("ip", WiFi.localIP().toString());
-  initJson.set("timestamp/.sv", "timestamp");
-  initJson.set("spoutVersion", SPOUT_VERSION);
-  Firebase.RTDB.pushJSON(&initDo, "initLog", &initJson);
+  Serial.println("PM25AQI sensor found!");
+
+
+  // Log module initialization in Firebase
+  // generate unique ID
+  // byte mac[6];
+  // WiFi.macAddress(mac);
+  // moduleId = String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
+
+  // FirebaseData initDo;
+  // FirebaseJson initJson;
+  // initJson.add("moduleId", moduleId);
+  // initJson.add("ip", WiFi.localIP().toString());
+  // initJson.set("timestamp/.sv", "timestamp");
+  // initJson.set("spoutVersion", SPOUT_VERSION);
+  // Firebase.RTDB.pushJSON(&initDo, "initLog", &initJson);
 }
 
 
@@ -160,7 +179,7 @@ void loop(){
 
   //Firebase.ready works for authentication management and should be called repeatedly in the loop.
   // 300000ms is 5 minutes
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > 300000 || sendDataPrevMillis == 0))
+  if (Firebase.ready() && (millis() - sendDataPrevMillis > 3000 || sendDataPrevMillis == 0))
   {
     sendDataPrevMillis = millis();
 
@@ -214,23 +233,55 @@ void loop(){
 
     Serial.println();
 
-    FirebaseJson readings;
-    float temperature = bme.temperature;
-    uint32_t pressure = bme.pressure;
-    float humidity = bme.humidity;
-    uint32_t gas = bme.gas_resistance;
+    //! PM25AQI stuff should probably go in aqi files as handlers like in Furball
+    PM25_AQI_Data data;
+
+    if(!aqi.read(&data)) {
+      Serial.println("Failed to read PM25AQI sensor!");
+      // delay(500); // Should probably not be doing this after testing
+      return;
+    }
+    Serial.println("AQI reading success");
+    
+    Serial.println();
+    Serial.println(F("---------------------------------------"));
+    Serial.println(F("Concentration Units (standard)"));
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_standard);
+    Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_standard);
+    Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_standard);
+    Serial.println(F("Concentration Units (environmental)"));
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_env);
+    Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_env);
+    Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_env);
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("Particles > 0.3um / 0.1L air:")); Serial.println(data.particles_03um);
+    Serial.print(F("Particles > 0.5um / 0.1L air:")); Serial.println(data.particles_05um);
+    Serial.print(F("Particles > 1.0um / 0.1L air:")); Serial.println(data.particles_10um);
+    Serial.print(F("Particles > 2.5um / 0.1L air:")); Serial.println(data.particles_25um);
+    Serial.print(F("Particles > 5.0um / 0.1L air:")); Serial.println(data.particles_50um);
+    Serial.print(F("Particles > 10 um / 0.1L air:")); Serial.println(data.particles_100um);
+    Serial.println(F("---------------------------------------"));
+
+    // Firebase readings spouting
+    // FirebaseJson readings;
+    // float temperature = bme.temperature;
+    // uint32_t pressure = bme.pressure;
+    // float humidity = bme.humidity;
+    // uint32_t gas = bme.gas_resistance;
 
 
-    readings.set("bme/temperature", temperature);
-    readings.set("bme/pressure", pressure / 100.0);
-    readings.set("bme/humidity", humidity);
-    readings.set("bme/gas", gas / 1000.0);
-    readings.set("moduleId/", moduleId);
-    readings.set("timestamp/.sv", "timestamp");
+    // readings.set("bme/temperature", temperature);
+    // readings.set("bme/pressure", pressure / 100.0);
+    // readings.set("bme/humidity", humidity);
+    // readings.set("bme/gas", gas / 1000.0);
+    // readings.set("moduleId/", moduleId);
+    // readings.set("timestamp/.sv", "timestamp");
 
-    Serial.printf(
-      "Push data with timestamp... %s\n",
-      Firebase.RTDB.pushJSON(&fbdo, "readouts", &readings) ? "ok" : fbdo.errorReason().c_str());
+    // Serial.printf(
+    //   "Push data with timestamp... %s\n",
+    //   Firebase.RTDB.pushJSON(&fbdo, "readouts", &readings) ? "ok" : fbdo.errorReason().c_str());
 
 
     count++;
