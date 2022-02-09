@@ -18,7 +18,7 @@
 // OTA stuff
 #include <ArduinoOTA.h>
 
-#define SPOUT_VERSION "0.0.2"
+#define SPOUT_VERSION "0.0.3"
 // #define SEALEVELPRESSURE_HPA (1013.25)
 
 // Define Firebase Data object
